@@ -1,0 +1,17 @@
+{
+  "userName": "Your Name",
+  "granolaApiKey": "YOUR_GRANOLA_API_KEY",
+  "vaultPath": "C:\\Path\\To\\Your\\Obsidian Vault",
+  "syncMinutes": 15,
+  "firstSyncDaysBack": 7,
+  "model": "claude-haiku-5-5",
+  "subagentModel": "haiku",
+  "chatModel": "claude-opus-5-5",
+  "claudeCmd": "claude",
+  "vaultTodoFile": "To-Do Assistente.md",
+  "notesFolder": "Appunti",
+  "askFolder": "Ask Gengar",
+  "autoStart": true,
+  "hotkey": "Alt+G",
+  "hideHotkey": "Control+Alt+G"
+}

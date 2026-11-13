@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Personal runtime data: to-dos, chats, UI state, attachments, Whisper models, Granola note copies
+data/
+# Mock data (regenerated at runtime)
+data-mock/
+
+# Local configuration with secrets (copy config.example.json to config.json)
+config.json
+.env
+.env.*
+
+# Large media / promo material
+video-promo/
+*.mp4
+*.mov
+*.webm
+!docs/demo.mp4
+
+# Logs and temp files
+logs/
+*.log
+npm-debug.log*
+*.tmp
+*.bak
+
+# Build output
+dist/
+out/
+
+# OS / editor junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+.vscode/
+.idea/

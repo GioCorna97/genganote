@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>GengaNote</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><img class="logo" id="logo" src="assets/gengar-closed.png" alt=""><div><b>GengaNote</b><div class="sub" id="syncLabel">…</div></div></div>
+    <div class="hbtns">
+      <div class="modesw" id="modeSw" title="Mock: dati finti per screenshot e video · Official: i tuoi dati"><button data-mode="mock">Mock</button><button data-mode="official">Official</button></div>
+      <button id="syncBtn" class="icon" title="Sincronizza Granola ora">↻</button>
+      <button id="closeBtn" class="icon" title="Chiudi (Esc)">✕</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="todo" class="active">Da fare <span class="count" id="cTodo"></span></button>
+    <button data-tab="waiting">In attesa <span class="count" id="cWaiting"></span></button>
+    <button data-tab="notes">Appunti</button>
+    <button data-tab="done">Fatti</button>
+    <button data-tab="ask" class="askbtn" title="Gengar: chat con i tuoi to-do, Granola, second brain, allegati">Ask Gengar</button>
+  </nav>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <section id="tab-todo" class="tab active">
+    <form id="addForm" class="add">
+      <input id="addInput" autocomplete="off" placeholder="Aggiungi al volo… (Win+H per dettare)">
+      <button type="submit" class="icon primary" title="Aggiungi">＋</button>
+    </form>
+    <div id="todoList" class="list"></div>
+  </section>
+
+  <section id="tab-waiting" class="tab"><div id="waitingList" class="list"></div></section>
+  <section id="tab-done" class="tab"><div id="doneList" class="list"></div></section>
+
+  <section id="tab-notes" class="tab notes">
+    <div class="folderbar">
+      <div class="suggest" id="suggest">📁 Scrivi qualcosa e ti suggerisco la cartella…</div>
+      <div class="pick">
+        <select id="folderSel"></select>
+        <input id="newFolder" class="hidden" placeholder="Nome nuova cartella" autocomplete="off">
+      </div>
+    </div>
+    <input id="noteTitle" class="notetitle" placeholder="Titolo (lo propongo io)" autocomplete="off">
+    <textarea id="noteText" placeholder="Appunta qui… (Ctrl+Invio per salvare su Obsidian)"></textarea>
+    <div class="notefoot">
+      <span id="noteStatus" class="sub"></span>
+      <button id="noteSave" class="btn primary">Salva su Obsidian</button>
+    </div>
+  </section>
+
+  <section id="tab-ask" class="tab chat ask">
+    <div class="askbar">
+      <select id="askCluster" title="Dove archiviare questa chat nel second brain"></select>
+      <button id="askHist" class="icon" title="Storico chat">🕘</button>
+    </div>
+    <div class="askbar2">
+      <button id="askNew" class="ghost" title="Nuova chat">＋ Nuova</button>
+      <select id="askModel" title="Modello">
+        <option value="auto">Auto</option>
+        <option value="haiku">Haiku 5.5 · veloce</option>
+        <option value="sonnet">Sonnet 5.5</option>
+        <option value="opus">Opus 5.5 · profondo</option>
+      </select>
+    </div>
+    <input id="askNewClusterInput" class="askNewCluster hidden" placeholder="Nome del nuovo cluster (Invio per creare, Esc per annullare)" autocomplete="off">
+    <div id="askHistory" class="askhistory hidden"></div>
+    <div id="askSuggest" class="asksuggest hidden"></div>
+    <div id="askLog" class="chatlog"></div>
+    <div class="quick">
+      <button data-q="Fammi il briefing di oggi: cosa è urgente, cosa devo fare per primo e cosa sto aspettando dagli altri.">☀️ Briefing</button>
+      <button data-q="Ho un po&#39; di tempo adesso: qual è la singola cosa più utile da fare e qual è il primo passo?">🎯 Cosa faccio ora?</button>
+      <button data-q="Rivedi le priorità e le scadenze dei miei to-do aperti e correggi quelle che non hanno senso. Segnala eventuali duplicati.">🧹 Riordina</button>
+    </div>
+    <div id="askFiles" class="askfiles"></div>
+    <form id="askForm" class="chatform">
+      <label class="icon attach" title="Allega immagini, PDF, audio, video o testo">📎<input type="file" id="askFile" multiple hidden></label>
+      <textarea id="askInput" rows="2" placeholder="Chiedi a Gengar… (Invio per inviare)"></textarea>
+      <button type="submit" class="icon primary" id="askSend" title="Invia (Invio)">➤</button>
+    </form>
+  </section>
+
+</div>
+<script src="panel.js"></script>
+<script src="ask-ui.js"></script>
+</body>
+</html>

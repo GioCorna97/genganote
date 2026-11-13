@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Brain</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+  .wrap { position: absolute; inset: 0; display: grid; place-items: center; }
+
+  .stage { position: relative; width: 64px; height: 64px; cursor: pointer; }
+  /* Il galleggiamento NON usa animazioni CSS infinite: con il rendering software il livello animato
+     a un certo punto non arriva più a Windows e Gengar sparisce (restano badge e ombra).
+     Lo muove lo script con translate/rotate/scale statici (vedi "galleggiamento" sotto). */
+  .float { position: absolute; inset: 0; transition: transform .25s cubic-bezier(.3,1.6,.5,1); }
+  .stage:hover .float { transform: scale(1.1) rotate(-4deg); }
+
+  .g {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none;
+    -webkit-user-drag: none;
+  }
+  /* NIENTE "filter" qui: con il rendering software i livelli con filtro non arrivano a Windows
+     e Gengar sparisce da screenshot e registrazioni (resta solo il badge). Ombra con un gradiente. */
+  .shadow { position: absolute; left: 14px; right: 14px; bottom: 2px; height: 10px; border-radius: 50%; pointer-events: none;
+            background: radial-gradient(closest-side, rgba(20, 5, 50, .38), rgba(20, 5, 50, 0)); }
+  .g.open { opacity: 0; }
+
+
+  /* effetti: anello + scintille */
+  .fx { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+  .ring { position: absolute; left: 0; top: 0; width: 56px; height: 56px; border-radius: 50%;
+          border: 2px solid rgba(190, 160, 255, .95); box-shadow: 0 0 14px rgba(170, 130, 255, .8), inset 0 0 10px rgba(255,255,255,.5); }
+  .spark { position: absolute; left: 0; top: 0; font: 700 13px/1 "Segoe UI Symbol", "Segoe UI Emoji", sans-serif;
+           text-shadow: 0 0 6px currentColor; }
+  .puff { position: absolute; left: 0; top: 0; width: 18px; height: 18px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(255,255,255,.95), rgba(200,175,255,.55) 60%, rgba(200,175,255,0) 72%); }
+
+  .badge {
+    position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+    border-radius: 8px; background: #6d4aff; color: #fff; font: 700 9px/16px "Segoe UI", sans-serif; text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,.35); pointer-events: none; transition: background .3s;
+  }
+  .badge.fire { background: #e8430c; }
+
+  /* modalità nascosta: Gengar sbircia dall'angolo sopra la taskbar */
+  .peek { position: absolute; right: 0; bottom: 0; width: 100%; height: 100%; object-fit: contain; object-position: right bottom;
+          pointer-events: none; -webkit-user-drag: none; transform: translateY(105%); }
+  .peekhit { position: absolute; inset: 0; cursor: pointer; display: none; }
+  body.mode-peek .peekhit { display: block; }
+  body.mode-peek .stage, body.mode-peek .badge { display: none; }
+  body.mode-peek .peek { transform: none; }
+  body.mode-peek .peek.idle { transform-origin: right bottom; } /* il "saluto" lo muove lo script */
+  .peekbadge { position: absolute; top: 2px; left: 4px; min-width: 13px; height: 13px; padding: 0 3px; box-sizing: border-box; border-radius: 7px;
+               background: #6d4aff; color: #fff; font: 700 8px/13px "Segoe UI", sans-serif; text-align: center; pointer-events: none; display: none; }
+  .peekbadge.fire { background: #e8430c; }
+  body.mode-peek .peekbadge:not(:empty) { display: block; }
+  .badge:empty { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage" id="stage" title="GengaNote">
+    <div class="shadow"></div>
+    <div class="float" id="float">
+      <img class="g closed" id="gClosed" src="assets/gengar-closed.png" alt="">
+      <img class="g open" id="gOpen" src="assets/gengar-open.png" alt="">
+    </div>
+  </div>
+  <div class="fx" id="fx"></div>
+  <img class="peek" id="peek" src="assets/gengar-peek.png" alt="">
+  <div class="peekhit" id="peekhit" title="Click: fai tornare Gengar"></div>
+  <div class="peekbadge" id="peekbadge"></div>
+  <div class="badge" id="badge"></div>
+</div>
+<script>
+  const stage = document.getElementById('stage');
+  const gClosed = document.getElementById('gClosed');
+  const gOpen = document.getElementById('gOpen');
+  const fx = document.getElementById('fx');
+  const badge = document.getElementById('badge');
+  const peek = document.getElementById('peek');
+  const peekhit = document.getElementById('peekhit');
+  const peekbadge = document.getElementById('peekbadge');
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // ---------- stato (contatore, tooltip, sync) ----------
+  function render(s) {
+    const urgent = s.stats.urgent, open = s.stats.open;
+    stage.classList.toggle('syncing', !!s.syncing);
+    badge.classList.toggle('fire', urgent > 0);
+    badge.textContent = open || '';
+    peekbadge.textContent = urgent || '';
+    peekbadge.classList.toggle('fire', urgent > 0);
+    stage.title = `${open} da fare` + (urgent ? ` · ${urgent} urgenti` : '') + (s.stats.waiting ? ` · ${s.stats.waiting} in attesa` : '')
+      + (s.syncing ? ' · sync in corso…' : '') + '\nClick: apri · Trascina: sposta · Tasto destro: menu';
+  }
+  api.on('state', render);
+  api.invoke('state:get').then(render);
+
+  // ---------- transizione chiuso <-> aperto ----------
+  let isOpen = false;
+
+  function burst(opening) {
+    // anello di energia
+    const ring = document.createElement('div');
+    ring.className = 'ring';
+    fx.appendChild(ring);
+    ring.animate([
+      { transform: 'translate(-50%,-50%) scale(.35)', opacity: .95 },
+      { transform: 'translate(-50%,-50%) scale(1.35)', opacity: 0 },
+    ], { duration: opening ? 650 : 480, delay: opening ? 170 : 90, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'both' })
+      .onfinish = () => ring.remove();
+
+    // sbuffi di nebbia (è un fantasma)
+    for (let i = 0; i < (opening ? 5 : 3); i++) {
+      const p = document.createElement('div');
+      p.className = 'puff';
+      fx.appendChild(p);
+      const a = rnd(0, Math.PI * 2), d = rnd(14, 26);
+      p.animate([
+        { transform: 'translate(-50%,-50%) scale(.3)', opacity: 0 },
+        { transform: `translate(calc(-50% + ${Math.cos(a) * d * .6}px), calc(-50% + ${Math.sin(a) * d * .6}px)) scale(1.1)`, opacity: .9, offset: .35 },
+        { transform: `translate(calc(-50% + ${Math.cos(a) * d}px), calc(-50% + ${Math.sin(a) * d - 6}px)) scale(1.9)`, opacity: 0 },
+      ], { duration: rnd(560, 760), delay: opening ? 150 : 60, easing: 'ease-out', fill: 'both' }).onfinish = () => p.remove();
+    }
+
+    // scintille che schizzano fuori
+    const glyphs = ['✦', '✧', '★', '♥', '✨'], colors = ['#ffffff', '#d9c7ff', '#b79bff', '#ffc2ee', '#ffe27a'];
+    const n = opening ? 11 : 6;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('div');
+      s.className = 'spark';
+      s.textContent = glyphs[i % glyphs.length];
+      s.style.color = colors[i % colors.length];
+      fx.appendChild(s);
+      const a = (i / n) * Math.PI * 2 + rnd(-.3, .3), d = rnd(27, 36);
+      s.animate([
+        { transform: 'translate(-50%,-50%) scale(.2) rotate(0deg)', opacity: 0 },
+        { transform: `translate(calc(-50% + ${Math.cos(a) * d * .7}px), calc(-50% + ${Math.sin(a) * d * .7}px)) scale(1.15) rotate(${rnd(60, 160)}deg)`, opacity: 1, offset: .45 },
+        { transform: `translate(calc(-50% + ${Math.cos(a) * d}px), calc(-50% + ${Math.sin(a) * d + 4}px)) scale(.4) rotate(${rnd(200, 320)}deg)`, opacity: 0 },
+      ], { duration: rnd(620, 900), delay: (opening ? 140 : 60) + rnd(0, 120), easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'both' })
+        .onfinish = () => s.remove();
+    }
+  }
+
+  function setOpen(open) {
+    if (open === isOpen) return;
+    isOpen = open;
+    const outEl = open ? gClosed : gOpen, inEl = open ? gOpen : gClosed;
+    [gClosed, gOpen].forEach(el => el.getAnimations().forEach(a => a.cancel()));
+    stage.classList.toggle('open', open);
+
+    // 1) il personaggio che esce si schiaccia (anticipazione) e schizza via
+    outEl.style.opacity = '0';
+    outEl.animate([
+      { transform: 'scale(1,1)', opacity: 1 },
+      { transform: 'scale(1.2,.74) translateY(4px)', opacity: 1, offset: .45 },
+      { transform: 'scale(.55,1.4) translateY(-16px) rotate(' + (open ? 8 : -8) + 'deg)', opacity: 0 },
+    ], { duration: 280, easing: 'ease-in', fill: 'both' });
+
+    // 2) quello che entra "pop": parte piccolo e ruotato, supera la misura, rimbalza e si assesta
+    inEl.style.opacity = '1';
+    inEl.animate([
+      { transform: 'scale(.25,.25) translateY(14px) rotate(' + (open ? -22 : 22) + 'deg)', opacity: 0 },
+      { transform: 'scale(1.28,.86) translateY(-4px) rotate(' + (open ? 7 : -7) + 'deg)', opacity: 1, offset: .5 },
+      { transform: 'scale(.9,1.12) translateY(-9px) rotate(' + (open ? -4 : 4) + 'deg)', opacity: 1, offset: .72 },
+      { transform: 'scale(1.04,.97) translateY(1px) rotate(1deg)', opacity: 1, offset: .88 },
+      { transform: 'scale(1,1) translateY(0) rotate(0deg)', opacity: 1 },
+    ], { duration: 640, delay: 190, easing: 'cubic-bezier(.3,.6,.4,1)', fill: 'both' });
+
+    burst(open);
+  }
+  api.on('panel-open', setOpen);
+  // dopo un ricaricamento (cambio monitor): riprendi lo stato del pannello senza animazione
+  api.invoke('bubble:panel-open').then(o => {
+    if (!o || isOpen) return;
+    isOpen = true; stage.classList.add('open'); gClosed.style.opacity = '0'; gOpen.style.opacity = '1';
+  });
+
+  // ---------- nascondi / sbircia / ritorno ----------
+  const floatEl = document.getElementById('float');
+
+  // ---------- galleggiamento (al posto delle animazioni CSS infinite) ----------
+  // ~30 fps, valori statici ridisegnati dal thread principale: niente livello animato che può "perdersi".
+  const wave = (t, period) => (1 - Math.cos((t / period) * 2 * Math.PI)) / 2;
+  // saluto del Gengar che sbircia: fermo per il 70% del ciclo da 4.5 s, poi un piccolo dondolio
+  const lerpKeys = (x, keys) => { for (let i = 1; i < keys.length; i++) if (x <= keys[i][0]) {
+    const [x0, a0, b0] = keys[i - 1], [x1, a1, b1] = keys[i], k = (x - x0) / (x1 - x0), e = k * k * (3 - 2 * k);
+    return [a0 + (a1 - a0) * e, b0 + (b1 - b0) * e]; } return [0, 0]; };
+  const PEEK_KEYS = [[0, 0, 0], [.70, 0, 0], [.76, -3, -3], [.82, 0, 2], [.88, 0, 0], [1, 0, 0]];
+  setInterval(() => {
+    const t = performance.now() / 1000;
+    if (document.body.classList.contains('mode-peek')) {
+      const [py, pr] = peek.classList.contains('idle') ? lerpKeys((t % 4.5) / 4.5, PEEK_KEYS) : [0, 0];
+      peek.style.translate = `0 ${py.toFixed(2)}px`;
+      peek.style.rotate = `${pr.toFixed(2)}deg`;
+      return;
+    }
+    let y = 0, r = 0, s = 1;
+    if (stage.classList.contains('syncing')) { s = 1 - 0.1 * wave(t, 1.1); }
+    else if (stage.classList.contains('open')) { const p = wave(t, 3.8); s = 1 + 0.035 * p; y = -p; }
+    else { const p = wave(t, 3.4); y = -3 * p; r = 1.5 * p; }
+    floatEl.style.translate = `0 ${y.toFixed(2)}px`;
+    floatEl.style.rotate = `${r.toFixed(2)}deg`;
+    floatEl.style.scale = s.toFixed(4);
+  }, 33);
+
+  function setMode(m) {
+    if (m === 'leaving') {
+      // tuffo: piccolo salto, poi giro su se stesso e sparisce in uno sbuffo
+      burst(false);
+      floatEl.animate([
+        { transform: 'none', opacity: 1 },
+        { transform: 'translateY(-8px) scale(1.12,.9)', opacity: 1, offset: .3 },
+        { transform: 'translateY(10px) scale(.1) rotate(540deg)', opacity: 0 },
+      ], { duration: 400, easing: 'cubic-bezier(.5,0,.8,.4)', fill: 'forwards' });
+    } else if (m === 'peek') {
+      document.body.classList.add('mode-peek');
+      peek.classList.remove('idle');
+      peek.getAnimations().forEach(a => a.cancel());
+      // spunta da sotto la taskbar, supera un po' e si assesta
+      peek.animate([
+        { transform: 'translateY(105%)' },
+        { transform: 'translateY(-10%)', offset: .65 },
+        { transform: 'translateY(3%)', offset: .85 },
+        { transform: 'none' },
+      ], { duration: 620, delay: 80, easing: 'cubic-bezier(.3,.7,.4,1)', fill: 'backwards' }).onfinish = () => peek.classList.add('idle');
+    } else if (m === 'unpeeking') {
+      peek.classList.remove('idle');
+      peek.animate([{ transform: 'translateY(-12%)', offset: .3 }, { transform: 'translateY(105%)' }],
+        { duration: 290, easing: 'ease-in', fill: 'forwards' });
+    } else if (m === 'float') {
+      document.body.classList.remove('mode-peek');
+      peek.getAnimations().forEach(a => a.cancel());
+      floatEl.getAnimations().forEach(a => a.cancel());
+      floatEl.animate([
+        { transform: 'scale(.2) rotate(-200deg)', opacity: 0 },
+        { transform: 'scale(1.2) rotate(10deg)', opacity: 1, offset: .6 },
+        { transform: 'scale(.95) rotate(-3deg)', offset: .8 },
+        { transform: 'none', opacity: 1 },
+      ], { duration: 560, easing: 'cubic-bezier(.3,.7,.4,1)' });
+      burst(true);
+    }
+  }
+  api.on('mode', setMode);
+
+  // ---------- autoriparazione: se un'animazione si è interrotta a metà, rimetti Gengar visibile ----------
+  let lastAnim = 0;
+  const _animate = Element.prototype.animate;
+  Element.prototype.animate = function (...a) { lastAnim = Date.now(); return _animate.apply(this, a); };
+  function heal(force) {
+    if (!force && Date.now() - lastAnim < 1500) return; // c'è una transizione in corso: non toccare
+    const peekMode = document.body.classList.contains('mode-peek');
+    if (!peekMode) {
+      floatEl.getAnimations().forEach(a => { if (!(a instanceof CSSAnimation)) a.cancel(); });
+      floatEl.style.opacity = ''; floatEl.style.transform = '';
+      [gClosed, gOpen].forEach(el => el.getAnimations().forEach(a => a.cancel()));
+      gClosed.style.opacity = isOpen ? '0' : '1';
+      gOpen.style.opacity = isOpen ? '1' : '0';
+      gClosed.style.transform = gOpen.style.transform = '';
+    } else {
+      peek.getAnimations().forEach(a => { if (!(a instanceof CSSAnimation)) a.cancel(); });
+      peek.style.transform = '';
+      peek.classList.add('idle');
+    }
+    // se l'immagine non si è caricata, ricaricala
+    for (const img of [gClosed, gOpen, peek]) if (!img.complete || !img.naturalWidth) img.src = img.src.split('?')[0] + '?r=' + Date.now();
+  }
+  setInterval(() => heal(false), 4000);
+  api.on('heal', () => heal(true));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) heal(true); });
+  api.invoke('bubble:mode').then(m => { if (m === 'peek') { document.body.classList.add('mode-peek'); setMode('peek'); } });
+  peekhit.addEventListener('click', () => api.send('bubble:click'));
+
+  // ---------- drag manuale: distingue click da trascinamento ----------
+  let start = null, dragging = false;
+  stage.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    start = { x: e.screenX, y: e.screenY }; dragging = false;
+    stage.setPointerCapture(e.pointerId);
+    api.send('bubble:drag-start');
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!start) return;
+    const dx = e.screenX - start.x, dy = e.screenY - start.y;
+    if (!dragging && Math.hypot(dx, dy) > 4) dragging = true;
+    if (dragging) api.send('bubble:drag-move', dx, dy);
+  });
+  stage.addEventListener('pointerup', e => {
+    if (!start) return;
+    stage.releasePointerCapture(e.pointerId);
+    if (dragging) api.send('bubble:drag-end'); else api.send('bubble:click');
+    start = null; dragging = false;
+  });
+  window.addEventListener('contextmenu', e => { e.preventDefault(); api.send('bubble:menu'); });
+</script>
+</body>
+</html>
